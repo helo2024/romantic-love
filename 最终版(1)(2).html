@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>浪漫星空</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap');
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Playfair Display', serif;
+            background: linear-gradient(135deg, #0b0b3b, #3b0b3b);
+        }
+
+        #scene {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            z-index: 10;
+            width: 80%;
+        }
+
+        h1 {
+            font-size: 3em;
+            margin-bottom: 0.5em;
+            opacity: 0;
+            transform: translateY(20px);
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        .action-btn {
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 2px solid #ffd700;
+            color: #ffd700;
+            padding: 12px 24px;
+            font-size: 1.2em;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-radius: 50px;
+            margin-top: 20px;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+            .action-btn:hover {
+                background-color: #ffd700;
+                color: #3b0b3b;
+            }
+
+        .final-message {
+            font-size: 4em;
+            opacity: 0;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            text-align: center;
+            background: linear-gradient(45deg, #ff00ff, #00ffff, #ff00ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-size: 300% 300%;
+            animation: rainbow-text 5s ease-in-out infinite;
+        }
+
+        @keyframes rainbow-text {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        .ripple {
+            position: absolute;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            animation: ripple-effect 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+            pointer-events: none;
+        }
+
+        @keyframes ripple-effect {
+            0% {
+                width: 0;
+                height: 0;
+                opacity: 0.5;
+            }
+
+            100% {
+                width: 500px;
+                height: 500px;
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="scene"></div>
+    <div class="content">
+        <h1 id="message">点一下试试</h1>
+        <button id="actionButton" class="action-btn" onclick="nextStep()">点击</button>
+    </div>
+    <div id="finalMessage" class="final-message"></div>
+
+    <script>
+        let scene, camera, renderer, particles, hearts;
+        let step = 0;
+        const messages = [
+            "点一下试试",
+            "看来点一次不行，再点一下？",
+            "老婆~爱你呀❤️"
+        ];
+        let magicParticles, magicParticleSystem;
+        let mouseX = 0, mouseY = 0;
+        let targetRotationX = 0, targetRotationY = 0;
+
+        let autoRotationSpeed = 0.001; // 降低自动旋转速度
+        let manualRotation = new THREE.Vector2(0, 0);
+        let lastMousePosition = new THREE.Vector2(0, 0);
+
+
+        let isMouseDown = false;
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.z = 1000;
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('scene').appendChild(renderer.domElement);
+
+            createStars();
+            createHearts();
+            camera.position.z = 1000;
+
+            animate();
+            fadeInElements();
+            document.addEventListener('mousemove', onMouseMove, false);
+        }
+        function createMagicParticles() {
+            const particleCount = 1000;
+            const particles = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            const sizes = new Float32Array(particleCount);
+
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = Math.random() * 2000 - 1000;
+                positions[i * 3 + 1] = Math.random() * 2000 - 1000;
+                positions[i * 3 + 2] = Math.random() * 2000 - 1000;
+
+                colors[i * 3] = Math.random();
+                colors[i * 3 + 1] = Math.random();
+                colors[i * 3 + 2] = Math.random();
+
+                sizes[i] = Math.random() * 2 + 1; // 初始大小范围从1到3
+            }
+
+            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+            const material = new THREE.PointsMaterial({
+                size: 1,
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                sizeAttenuation: true
+            });
+
+            magicParticleSystem = new THREE.Points(particles, material);
+            scene.add(magicParticleSystem);
+        }
+
+        function updateMagicParticles() {
+            const positions = magicParticleSystem.geometry.attributes.position.array;
+            const colors = magicParticleSystem.geometry.attributes.color.array;
+            const sizes = magicParticleSystem.geometry.attributes.size.array;
+
+            for (let i = 0; i < positions.length; i += 3) {
+                // 更新位置
+                positions[i] += (mouseX * 1000 - positions[i]) * 0.01;
+                positions[i + 1] += (-mouseY * 1000 - positions[i + 1]) * 0.01;
+
+                // 限制粒子的移动范围
+                positions[i] = THREE.MathUtils.clamp(positions[i], -1000, 1000);
+                positions[i + 1] = THREE.MathUtils.clamp(positions[i + 1], -1000, 1000);
+
+                // 更新颜色
+                colors[i] = Math.sin(Date.now() * 0.001 + i) * 0.5 + 0.5;
+                colors[i + 1] = Math.sin(Date.now() * 0.002 + i) * 0.5 + 0.5;
+                colors[i + 2] = Math.sin(Date.now() * 0.003 + i) * 0.5 + 0.5;
+
+                // 更新大小，但保持在一个合理的范围内
+                sizes[i / 3] = (Math.sin(Date.now() * 0.001 + i) * 0.5 + 0.5) * 2 + 1; // 大小范围从1到3
+            }
+
+            magicParticleSystem.geometry.attributes.position.needsUpdate = true;
+            magicParticleSystem.geometry.attributes.color.needsUpdate = true;
+            magicParticleSystem.geometry.attributes.size.needsUpdate = true;
+        }
+        function createEnhancedFirework(position) {
+            const particleCount = 1000;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            const sizes = new Float32Array(particleCount);
+
+            const color = new THREE.Color();
+            color.setHSL(Math.random(), 1, 0.5);
+
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = position.x;
+                positions[i * 3 + 1] = position.y;
+                positions[i * 3 + 2] = position.z;
+
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+
+                sizes[i] = Math.random() * 8 + 4; // 增加粒子大小多样性
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+            const material = new THREE.PointsMaterial({
+                size: 4,
+                sizeAttenuation: true,
+                vertexColors: true,
+                transparent: true,
+                opacity: 1,
+                blending: THREE.AdditiveBlending
+            });
+
+            const points = new THREE.Points(geometry, material);
+            scene.add(points);
+
+            const velocities = [];
+            for (let i = 0; i < particleCount; i++) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI;
+                const speed = 2 + Math.random() * 3;
+                velocities.push(new THREE.Vector3(
+                    Math.sin(phi) * Math.cos(theta) * speed,
+                    Math.sin(phi) * Math.sin(theta) * speed,
+                    Math.cos(phi) * speed
+                ));
+            }
+
+            let explosionProgress = 0;
+
+            function updateExplosion() {
+                explosionProgress += 1 / 60;
+
+                for (let i = 0; i < particleCount; i++) {
+                    velocities[i].y -= 0.05; // 重力
+                    velocities[i].multiplyScalar(0.99); // 空气阻力
+
+                    positions[i * 3] += velocities[i].x;
+                    positions[i * 3 + 1] += velocities[i].y;
+                    positions[i * 3 + 2] += velocities[i].z;
+
+                    // 颜色渐变效果
+                    const t = explosionProgress / 3;
+                    colors[i * 3] = color.r * (1 - t) + t;
+                    colors[i * 3 + 1] = color.g * (1 - t);
+                    colors[i * 3 + 2] = color.b * (1 - t);
+
+                    // 粒子大小衰减
+                    sizes[i] *= 0.99;
+                }
+
+                geometry.attributes.position.needsUpdate = true;
+                geometry.attributes.color.needsUpdate = true;
+                geometry.attributes.size.needsUpdate = true;
+
+                material.opacity = Math.max(0, 1 - explosionProgress / 3);
+
+                if (explosionProgress < 3) {
+                    requestAnimationFrame(updateExplosion);
+                } else {
+                    scene.remove(points);
+                }
+            }
+
+            updateExplosion();
+        }
+
+        function onMouseMove(event) {
+            if (isMouseDown) {
+                manualRotation.x += (event.clientX - lastMousePosition.x) * 0.002;
+                manualRotation.y += (event.clientY - lastMousePosition.y) * 0.002;
+                lastMousePosition.set(event.clientX, event.clientY);
+            }
+        }
+        document.addEventListener('mousedown', onMouseDown, false);
+        document.addEventListener('mouseup', onMouseUp, false);
+        document.addEventListener('mousemove', onMouseMove, false);
+        function onMouseDown(event) {
+            isMouseDown = true;
+            lastMousePosition.set(event.clientX, event.clientY);
+        }
+
+        function onMouseUp() {
+            isMouseDown = false;
+        }
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 应用自动旋转
+            scene.rotation.y += autoRotationSpeed;
+
+            // 应用手动旋转
+            scene.rotation.y += manualRotation.x;
+            scene.rotation.x += manualRotation.y;
+
+            // 缓慢减少手动旋转的影响
+            manualRotation.multiplyScalar(0.50);
+
+            renderer.render(scene, camera);
+        }
+
+        function createStars() {
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            for (let i = 0; i < 10000; i++) {
+                vertices.push(THREE.MathUtils.randFloatSpread(2000));
+                vertices.push(THREE.MathUtils.randFloatSpread(2000));
+                vertices.push(THREE.MathUtils.randFloatSpread(2000));
+            }
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            const material = new THREE.PointsMaterial({ color: 0xffffff, size: 2, transparent: true });
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+        }
+
+        function createHearts() {
+            const heartShape = new THREE.Shape();
+            const x = 0, y = 0;
+            heartShape.moveTo(x + 5, y + 5);
+            heartShape.bezierCurveTo(x + 5, y + 5, x + 4, y, x, y);
+            heartShape.bezierCurveTo(x - 6, y, x - 6, y + 7, x - 6, y + 7);
+            heartShape.bezierCurveTo(x - 6, y + 11, x - 3, y + 15.4, x + 5, y + 19);
+            heartShape.bezierCurveTo(x + 12, y + 15.4, x + 16, y + 11, x + 16, y + 7);
+            heartShape.bezierCurveTo(x + 16, y + 7, x + 16, y, x + 10, y);
+            heartShape.bezierCurveTo(x + 7, y, x + 5, y + 5, x + 5, y + 5);
+
+            const geometry = new THREE.ShapeGeometry(heartShape);
+            const material = new THREE.MeshBasicMaterial({ color: 0xff69b4, side: THREE.DoubleSide });
+            hearts = new THREE.Group();
+
+            for (let i = 0; i < 200; i++) {
+                const heart = new THREE.Mesh(geometry, material);
+                heart.position.set(
+                    THREE.MathUtils.randFloatSpread(2000),
+                    THREE.MathUtils.randFloatSpread(2000),
+                    THREE.MathUtils.randFloatSpread(2000)
+                );
+                heart.rotation.x = Math.random() * Math.PI;
+                heart.rotation.y = Math.random() * Math.PI;
+                heart.scale.set(0.5, 0.5, 0.5);
+                hearts.add(heart);
+            }
+
+            scene.add(hearts);
+        }
+
+
+
+
+        function fadeInElements() {
+            gsap.to("#message", { opacity: 1, y: 0, duration: 1, ease: "power2.out" });
+            gsap.to("#actionButton", { opacity: 1, y: 0, duration: 1, delay: 0.5, ease: "power2.out" });
+        }
+
+        function nextStep() {
+            step++;
+            if (step < messages.length - 1) {
+                gsap.to("#message", {
+                    opacity: 0,
+                    y: -20,
+                    duration: 0.5,
+                    ease: "power2.in",
+                    onComplete: () => {
+                        document.getElementById('message').innerText = messages[step];
+                        gsap.to("#message", { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" });
+                    }
+                });
+            } else if (step === messages.length - 1) {
+                gsap.to(".content", {
+                    opacity: 0, duration: 0.5, ease: "power2.in", onComplete: () => {
+                        document.querySelector('.content').style.display = 'none';
+                        document.getElementById('finalMessage').innerText = messages[step];
+                        gsap.to("#finalMessage", { opacity: 1, duration: 2, ease: "power2.out" });
+                        startRippleEffect();
+                    }
+                });
+                celebrateEffect();
+            }
+        }
+        function celebrateEffect() {
+            gsap.to(camera.position, { z: 1200, duration: 2, ease: "power2.inOut" });
+            gsap.to(hearts.rotation, { x: Math.PI * 4, y: Math.PI * 4, duration: 2.5, ease: "power2.inOut" });
+
+            hearts.children.forEach(heart => {
+                gsap.to(heart.scale, {
+                    x: THREE.MathUtils.randFloat(1, 2),
+                    y: THREE.MathUtils.randFloat(1, 2),
+                    z: THREE.MathUtils.randFloat(1, 2),
+                    duration: THREE.MathUtils.randFloat(1, 3),
+                    repeat: -1,
+                    yoyo: true,
+                    ease: "sine.inOut"
+                });
+                gsap.to(heart.position, {
+                    x: `+=${THREE.MathUtils.randFloatSpread(500)}`,
+                    y: `+=${THREE.MathUtils.randFloatSpread(500)}`,
+                    z: `+=${THREE.MathUtils.randFloatSpread(500)}`,
+                    duration: THREE.MathUtils.randFloat(5, 10),
+                    repeat: -1,
+                    yoyo: true,
+                    ease: "sine.inOut"
+                });
+            });// 创建更多的烟花，延长时间
+            for (let i = 0; i < 15; i++) {
+                setTimeout(() => {
+                    const position = new THREE.Vector3(
+                        THREE.MathUtils.randFloatSpread(1000),
+                        THREE.MathUtils.randFloatSpread(1000),
+                        THREE.MathUtils.randFloatSpread(500)
+                    );
+                    if (i % 3 === 0) {
+                        createHeartShapedFirework(position);
+                    } else {
+                        createEnhancedFirework(position);
+                    }
+                }, i * 800); // 增加间隔时间
+            }
+        }
+        function createFireworkTrail(startPosition, endPosition, duration) {
+            const trailGeometry = new THREE.BufferGeometry();
+            const trailMaterial = new THREE.PointsMaterial({
+                color: new THREE.Color(Math.random(), Math.random(), Math.random()),
+                size: 32, // 增加尺寸
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                opacity: 1
+            });
+
+            const positions = new Float32Array(200 * 3); // 增加轨迹点数量
+            trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const trailPoints = new THREE.Points(trailGeometry, trailMaterial);
+            scene.add(trailPoints);
+
+            let progress = 0;
+
+            function updateTrail() {
+                progress += 1 / 60;
+                const t = progress / duration;
+
+                for (let i = 0; i < 200; i++) {
+                    const segmentT = t - (i / 200) * 0.1;
+                    if (segmentT > 0 && segmentT < 1) {
+                        positions[i * 3] = startPosition.x + (endPosition.x - startPosition.x) * segmentT;
+                        positions[i * 3 + 1] = startPosition.y + (endPosition.y - startPosition.y) * segmentT;
+                        positions[i * 3 + 2] = startPosition.z + (endPosition.z - startPosition.z) * segmentT;
+                    } else {
+                        positions[i * 3] = positions[i * 3 + 1] = positions[i * 3 + 2] = 0;
+                    }
+                }
+
+                trailGeometry.attributes.position.needsUpdate = true;
+                trailMaterial.opacity = 1 - t;
+
+                if (progress < duration) {
+                    requestAnimationFrame(updateTrail);
+                } else {
+                    scene.remove(trailPoints);
+                }
+            }
+
+            updateTrail();
+        }
+
+        function createFireworkTrail(startPosition, endPosition, duration) {
+            const trailGeometry = new THREE.BufferGeometry();
+            const trailMaterial = new THREE.PointsMaterial({
+                color: new THREE.Color(Math.random(), Math.random(), Math.random()),
+                size: 4,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                opacity: 1
+            });
+
+            const positions = new Float32Array(200 * 3);
+            trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const trailPoints = new THREE.Points(trailGeometry, trailMaterial);
+            scene.add(trailPoints);
+
+            let progress = 0;
+
+            function updateTrail() {
+                progress += 1 / 60;
+                const t = progress / duration;
+
+                for (let i = 0; i < 200; i++) {
+                    const segmentT = t - (i / 200) * 0.1;
+                    if (segmentT > 0 && segmentT < 1) {
+                        positions[i * 3] = startPosition.x + (endPosition.x - startPosition.x) * segmentT;
+                        positions[i * 3 + 1] = startPosition.y + (endPosition.y - startPosition.y) * segmentT;
+                        positions[i * 3 + 2] = startPosition.z + (endPosition.z - startPosition.z) * segmentT;
+                    } else {
+                        positions[i * 3] = positions[i * 3 + 1] = positions[i * 3 + 2] = 0;
+                    }
+                }
+
+                trailGeometry.attributes.position.needsUpdate = true;
+                trailMaterial.opacity = 1 - t;
+
+                if (progress < duration) {
+                    requestAnimationFrame(updateTrail);
+                } else {
+                    scene.remove(trailPoints);
+                }
+            }
+
+            updateTrail();
+        }
+
+        function createLargeFirework() {
+            const viewportHeight = camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 2;
+            const viewportWidth = viewportHeight * camera.aspect;
+
+            const startPosition = new THREE.Vector3(
+                THREE.MathUtils.randFloatSpread(viewportWidth * 0.8),
+                -viewportHeight / 2,
+                THREE.MathUtils.randFloatSpread(500)
+            );
+            const endPosition = new THREE.Vector3(
+                startPosition.x + THREE.MathUtils.randFloatSpread(100),
+                THREE.MathUtils.randFloat(viewportHeight * 0.3, viewportHeight * 0.7),
+                startPosition.z
+            );
+
+            createFireworkTrail(startPosition, endPosition, 1.5);
+
+            setTimeout(() => {
+                createFlash(endPosition);
+                createFireworkExplosion(endPosition);
+            }, 1500);
+        }
+
+        function createFireworkExplosion(position) {
+            const particles = 500;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particles * 3);
+            const colors = new Float32Array(particles * 3);
+            const sizes = new Float32Array(particles);
+
+            const color = new THREE.Color();
+            color.setHSL(Math.random(), 1, 0.5);
+
+            for (let i = 0; i < particles; i++) {
+                positions[i * 3] = position.x;
+                positions[i * 3 + 1] = position.y;
+                positions[i * 3 + 2] = position.z;
+
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+
+                sizes[i] = Math.random() * 6 + 3; // 增加粒子大小
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+            const material = new THREE.PointsMaterial({
+                size: 4,
+                sizeAttenuation: true,
+                vertexColors: true,
+                transparent: true,
+                opacity: 1,
+                blending: THREE.AdditiveBlending
+            });
+
+            const points = new THREE.Points(geometry, material);
+            scene.add(points);
+
+            const velocities = [];
+            for (let i = 0; i < particles; i++) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI;
+                const speed = 2 + Math.random() * 3;
+                velocities.push(new THREE.Vector3(
+                    Math.sin(phi) * Math.cos(theta) * speed,
+                    Math.sin(phi) * Math.sin(theta) * speed,
+                    Math.cos(phi) * speed
+                ));
+            }
+
+            let explosionProgress = 0;
+
+            function updateExplosion() {
+                explosionProgress += 1 / 60;
+
+                for (let i = 0; i < particles; i++) {
+                    // 模拟重力和空气阻力
+                    velocities[i].y -= 0.05; // 重力
+                    velocities[i].multiplyScalar(0.99); // 空气阻力
+
+                    positions[i * 3] += velocities[i].x;
+                    positions[i * 3 + 1] += velocities[i].y;
+                    positions[i * 3 + 2] += velocities[i].z;
+
+                    // 颜色渐变效果
+                    const t = explosionProgress / 3;
+                    colors[i * 3] = color.r * (1 - t) + t;
+                    colors[i * 3 + 1] = color.g * (1 - t);
+                    colors[i * 3 + 2] = color.b * (1 - t);
+
+                    // 粒子大小衰减
+                    sizes[i] *= 0.99;
+                }
+
+                geometry.attributes.position.needsUpdate = true;
+                geometry.attributes.color.needsUpdate = true;
+                geometry.attributes.size.needsUpdate = true;
+
+                material.opacity = Math.max(0, 1 - explosionProgress / 3);
+
+                if (explosionProgress < 3) {
+                    requestAnimationFrame(updateExplosion);
+                } else {
+                    scene.remove(points);
+                }
+            }
+
+            updateExplosion();
+        }
+
+        function createHeartShapedFirework(position) {
+            const particleCount = 1000;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            const sizes = new Float32Array(particleCount);
+
+            const color = new THREE.Color(0xff69b4); // 粉红色
+
+            for (let i = 0; i < particleCount; i++) {
+                const t = i / particleCount;
+                const theta = t * Math.PI * 2;
+
+                // 心形方程
+                const x = 16 * Math.pow(Math.sin(theta), 3);
+                const y = 13 * Math.cos(theta) - 5 * Math.cos(2 * theta) - 2 * Math.cos(3 * theta) - Math.cos(4 * theta);
+
+                positions[i * 3] = position.x + x * 5;
+                positions[i * 3 + 1] = position.y + y * 5;
+                positions[i * 3 + 2] = position.z;
+
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+
+                sizes[i] = Math.random() * 4 + 2;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+            const material = new THREE.PointsMaterial({
+                size: 4,
+                sizeAttenuation: true,
+                vertexColors: true,
+                transparent: true,
+                opacity: 1,
+                blending: THREE.AdditiveBlending
+            });
+
+            const points = new THREE.Points(geometry, material);
+            scene.add(points);
+
+            let animationProgress = 0;
+
+            function updateHeartFirework() {
+                animationProgress += 1 / 120; // 减慢动画速度
+
+                for (let i = 0; i < particleCount; i++) {
+                    const scale = 1 + Math.sin(animationProgress * 2) * 0.1;
+                    positions[i * 3] = (positions[i * 3] - position.x) * scale + position.x;
+                    positions[i * 3 + 1] = (positions[i * 3 + 1] - position.y) * scale + position.y;
+
+                    // 颜色闪烁效果
+                    const colorScale = (Math.sin(animationProgress * 10 + i * 0.1) + 1) * 0.5;
+                    colors[i * 3] = color.r * colorScale;
+                    colors[i * 3 + 1] = color.g * colorScale;
+                    colors[i * 3 + 2] = color.b * colorScale;
+                }
+
+                geometry.attributes.position.needsUpdate = true;
+                geometry.attributes.color.needsUpdate = true;
+
+                material.opacity = Math.max(0, 1 - animationProgress / 8); // 延长淡出时间
+
+                if (animationProgress < 8) { // 延长总动画时间
+                    requestAnimationFrame(updateHeartFirework);
+                } else {
+                    scene.remove(points);
+                }
+            }
+
+            updateHeartFirework();
+        }
+
+
+        function createFlash(position) {
+            const flashGeometry = new THREE.SphereGeometry(5, 32, 32);
+            const flashMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 1
+            });
+            const flash = new THREE.Mesh(flashGeometry, flashMaterial);
+            flash.position.copy(position);
+            scene.add(flash);
+
+            gsap.to(flash.scale, {
+                x: 20,
+                y: 20,
+                z: 20,
+                duration: 0.3,
+                ease: "power2.out",
+                onComplete: () => {
+                    scene.remove(flash);
+                }
+            });
+
+            gsap.to(flashMaterial, {
+                opacity: 0,
+                duration: 0.3,
+                ease: "power2.out"
+            });
+        }
+        function startRippleEffect() {
+            const finalMessage = document.getElementById('finalMessage');
+            const rect = finalMessage.getBoundingClientRect();
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+
+            function createRipple() {
+                const ripple = document.createElement('div');
+                ripple.className = 'ripple';
+                ripple.style.left = centerX + 'px';
+                ripple.style.top = centerY + 'px';
+                ripple.style.transform = 'translate(-50%, -50%)';
+                document.body.appendChild(ripple);
+
+                setTimeout(() => {
+                    ripple.remove();
+                }, 2000);
+            }
+
+            // 创建初始的涟漪
+            createRipple();
+
+            // 每秒创建一个新的涟漪
+            setInterval(createRipple, 1000);
+
+            // 彩虹文字效果
+            gsap.to("#finalMessage", {
+                backgroundPosition: "200% center",
+                duration: 5,
+                repeat: -1,
+                ease: "none"
+            });
+
+            // 轻微的闪烁效果
+            gsap.to("#finalMessage", {
+                textShadow: "0 0 20px rgba(255,255,255,0.8)",
+                duration: 2,
+                repeat: -1,
+                yoyo: true,
+                ease: "sine.inOut"
+            });
+        }
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        init();
+    </script>
+</body>
+</html>
